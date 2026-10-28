@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Članovi - PK Poseidon</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div id="nav"></div>
+
+  <div class="container pb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <h1 class="h3 mb-0">Članovi</h1>
+      <button class="btn btn-primary" onclick="openForm()">+ Novi član</button>
+    </div>
+
+    <div id="alertBox"></div>
+
+    <div class="row g-2 mb-3">
+      <div class="col-md-5">
+        <input type="search" id="search" class="form-control" placeholder="Pretraga po imenu ili telefonu...">
+      </div>
+      <div class="col-6 col-md-3">
+        <select id="filterGrupa" class="form-select"><option value="">Sve grupe</option></select>
+      </div>
+      <div class="col-6 col-md-3">
+        <select id="filterStatus" class="form-select">
+          <option value="aktivni">Samo aktivni</option>
+          <option value="neaktivni">Samo neaktivni</option>
+          <option value="svi">Svi</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Ime i prezime</th><th>Grupa</th><th>Telefon</th><th>Upisan</th><th>Status</th><th class="text-end">Akcije</th>
+            </tr>
+          </thead>
+          <tbody id="tabela"><tr><td colspan="6" class="text-center text-muted py-4">Učitavanje...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="text-muted small mt-2" id="brojClanova"></div>
+  </div>
+
+  <!-- Forma za dodavanje / izmenu -->
+  <div class="modal fade" id="clanModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <form class="modal-content" id="clanForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalNaslov">Novi član</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="clanId">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Ime *</label><input id="ime" class="form-control" required></div>
+            <div class="col-md-6"><label class="form-label">Prezime *</label><input id="prezime" class="form-control" required></div>
+            <div class="col-md-6"><label class="form-label">Datum rođenja</label><input type="date" id="datum_rodjenja" class="form-control"></div>
+            <div class="col-md-6"><label class="form-label">Grupa</label><select id="grupa_id" class="form-select"><option value="">— bez grupe —</option></select></div>
+            <div class="col-md-6"><label class="form-label">Telefon</label><input id="telefon" class="form-control"></div>
+            <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="email" class="form-control"></div>
+            <div class="col-md-6"><label class="form-label">Ime roditelja (za maloletne)</label><input id="ime_roditelja" class="form-control"></div>
+            <div class="col-md-6"><label class="form-label">Datum upisa</label><input type="date" id="datum_upisa" class="form-control"></div>
+            <div class="col-12"><label class="form-label">Napomena</label><textarea id="napomena" class="form-control" rows="2"></textarea></div>
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="aktivan" checked>
+                <label class="form-check-label" for="aktivan">Aktivan član</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Otkaži</button>
+          <button type="submit" class="btn btn-primary">Sačuvaj</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    let clanovi = [];
+    let modal;
+
+    (async () => {
+      if (!(await requireLogin())) return;
+      renderNavbar('clanovi');
+      modal = new bootstrap.Modal(document.getElementById('clanModal'));
+      await ucitajGrupe();
+      await ucitajClanove();
+    })();
+
+    async function ucitajGrupe() {
+      const { data, error } = await db.from('grupe').select('id, naziv').order('naziv');
+      if (error) return showAlert('Greška pri učitavanju grupa: ' + error.message);
+      const opcije = data.map(g => `<option value="${g.id}">${escapeHtml(g.naziv)}</option>`).join('');
+      document.getElementById('grupa_id').innerHTML = '<option value="">— bez grupe —</option>' + opcije;
+      document.getElementById('filterGrupa').innerHTML = '<option value="">Sve grupe</option>' + opcije;
+    }
+
+    async function ucitajClanove() {
+      const { data, error } = await db.from('clanovi').select('*, grupe(naziv)').order('prezime').order('ime');
+      if (error) return showAlert('Greška pri učitavanju članova: ' + error.message);
+      clanovi = data;
+      prikazi();
+    }
+
+    function prikazi() {
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const grupa = document.getElementById('filterGrupa').value;
+      const status = document.getElementById('filterStatus').value;
+
+      const lista = clanovi.filter(c => {
+        if (status === 'aktivni' && !c.aktivan) return false;
+        if (status === 'neaktivni' && c.aktivan) return false;
+        if (grupa && String(c.grupa_id) !== grupa) return false;
+        if (q) {
+          const tekst = `${c.ime} ${c.prezime} ${c.telefon ?? ''}`.toLowerCase();
+          if (!tekst.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const tbody = document.getElementById('tabela');
+      if (lista.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nema članova.</td></tr>';
+      } else {
+        tbody.innerHTML = lista.map(c => `
+          <tr>
+            <td><strong>${escapeHtml(c.prezime)} ${escapeHtml(c.ime)}</strong>
+              ${c.ime_roditelja ? `<div class="small text-muted">Roditelj: ${escapeHtml(c.ime_roditelja)}</div>` : ''}</td>
+            <td>${escapeHtml(c.grupe?.naziv ?? '—')}</td>
+            <td>${escapeHtml(c.telefon ?? '')}</td>
+            <td>${fmtDate(c.datum_upisa)}</td>
+            <td>${c.aktivan ? '<span class="badge bg-success">Aktivan</span>' : '<span class="badge bg-secondary">Neaktivan</span>'}</td>
+            <td class="text-end text-nowrap">
+              <a class="btn btn-sm btn-success" href="uplate.html?clan=${c.id}">Uplata</a>
+              <button class="btn btn-sm btn-outline-primary" onclick="openForm(${c.id})">Izmeni</button>
+              <button class="btn btn-sm btn-outline-secondary" onclick="promeniStatus(${c.id})">${c.aktivan ? 'Deaktiviraj' : 'Aktiviraj'}</button>
+            </td>
+          </tr>`).join('');
+      }
+      document.getElementById('brojClanova').textContent = `Prikazano: ${lista.length} od ${clanovi.length}`;
+    }
+
+    ['search', 'filterGrupa', 'filterStatus'].forEach(id =>
+      document.getElementById(id).addEventListener('input', prikazi));
+
+    function openForm(id) {
+      document.getElementById('clanForm').reset();
+      const c = id ? clanovi.find(x => x.id === id) : null;
+      document.getElementById('modalNaslov').textContent = c ? 'Izmena člana' : 'Novi član';
+      document.getElementById('clanId').value = c ? c.id : '';
+
+      if (c) {
+        ['ime', 'prezime', 'datum_rodjenja', 'telefon', 'email', 'ime_roditelja', 'datum_upisa', 'napomena']
+          .forEach(f => { document.getElementById(f).value = c[f] ?? ''; });
+        document.getElementById('grupa_id').value = c.grupa_id ?? '';
+        document.getElementById('aktivan').checked = c.aktivan;
+      } else {
+        document.getElementById('datum_upisa').value = todayStr();
+      }
+      modal.show();
+    }
+
+    document.getElementById('clanForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('clanId').value;
+      const podaci = {
+        ime: val('ime'),
+        prezime: val('prezime'),
+        datum_rodjenja: val('datum_rodjenja'),
+        telefon: val('telefon'),
+        email: val('email'),
+        ime_roditelja: val('ime_roditelja'),
+        grupa_id: val('grupa_id') ? Number(val('grupa_id')) : null,
+        datum_upisa: val('datum_upisa') ?? todayStr(),
+        napomena: val('napomena'),
+        aktivan: document.getElementById('aktivan').checked,
+      };
+
+      const { error } = id
+        ? await db.from('clanovi').update(podaci).eq('id', id)
+        : await db.from('clanovi').insert(podaci);
+
+      if (error) return showAlert('Greška pri čuvanju: ' + error.message);
+      modal.hide();
+      showAlert('Član je sačuvan.', 'success');
+      await ucitajClanove();
+    });
+
+    async function promeniStatus(id) {
+      const c = clanovi.find(x => x.id === id);
+      const { error } = await db.from('clanovi').update({ aktivan: !c.aktivan }).eq('id', id);
+      if (error) return showAlert('Greška: ' + error.message);
+      await ucitajClanove();
+    }
+  </script>
+</body>
+</html>

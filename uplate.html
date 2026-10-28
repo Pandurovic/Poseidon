@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Uplate - Plivački klub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div id="nav"></div>
+
+  <div class="container pb-5">
+    <h1 class="h3 mb-3">Uplate</h1>
+    <div id="alertBox"></div>
+
+    <!-- Nova uplata -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-header bg-white fw-semibold">Nova uplata</div>
+      <div class="card-body">
+        <form id="uplataForm" class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Član *</label>
+            <select id="clan_id" class="form-select" required><option value="">— izaberi člana —</option></select>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Za mesec *</label>
+            <input type="month" id="za_mesec" class="form-control" required>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Iznos (RSD) *</label>
+            <input type="number" id="iznos" class="form-control" min="0.01" step="0.01" required>
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Datum uplate</label>
+            <input type="date" id="datum_uplate" class="form-control">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label">Način plaćanja</label>
+            <select id="nacin_placanja" class="form-select">
+              <option value="gotovina">Gotovina</option>
+              <option value="uplatnica">Uplatnica</option>
+              <option value="kartica">Kartica</option>
+              <option value="drugo">Drugo</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Napomena</label>
+            <input id="napomena" class="form-control">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-success">Sačuvaj uplatu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Pregled po mesecu -->
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
+      <h2 class="h5 mb-0">Pregled uplata</h2>
+      <div>
+        <label class="form-label small mb-0">Mesec</label>
+        <input type="month" id="filterMesec" class="form-control form-control-sm">
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>Član</th><th>Datum uplate</th><th>Iznos</th><th>Način</th><th>Napomena</th><th></th></tr>
+          </thead>
+          <tbody id="tabela"><tr><td colspan="6" class="text-center text-muted py-4">Učitavanje...</td></tr></tbody>
+          <tfoot id="ukupno" class="table-light fw-semibold"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    let aktivniClanovi = [];
+
+    (async () => {
+      if (!(await requireLogin())) return;
+      renderNavbar('uplate');
+
+      document.getElementById('za_mesec').value = thisMonthStr();
+      document.getElementById('datum_uplate').value = todayStr();
+      document.getElementById('filterMesec').value = thisMonthStr();
+
+      await ucitajClanove();
+      await ucitajUplate();
+
+      // Ako dolazimo sa liste clanova (uplate.html?clan=5), unapred izaberi clana
+      const clanIzUrl = new URLSearchParams(window.location.search).get('clan');
+      if (clanIzUrl) {
+        document.getElementById('clan_id').value = clanIzUrl;
+        popuniIznos();
+      }
+    })();
+
+    async function ucitajClanove() {
+      const { data, error } = await db.from('clanovi')
+        .select('id, ime, prezime, grupe(mesecna_clanarina)')
+        .eq('aktivan', true)
+        .order('prezime').order('ime');
+      if (error) return showAlert('Greška pri učitavanju članova: ' + error.message);
+      aktivniClanovi = data;
+      document.getElementById('clan_id').innerHTML =
+        '<option value="">— izaberi člana —</option>' +
+        data.map(c => `<option value="${c.id}">${escapeHtml(c.prezime)} ${escapeHtml(c.ime)}</option>`).join('');
+    }
+
+    // Kad se izabere clan, predlozi iznos iz mesecne clanarine njegove grupe
+    function popuniIznos() {
+      const c = aktivniClanovi.find(x => String(x.id) === document.getElementById('clan_id').value);
+      const clanarina = c?.grupe?.mesecna_clanarina;
+      if (clanarina) document.getElementById('iznos').value = clanarina;
+    }
+    document.getElementById('clan_id').addEventListener('change', popuniIznos);
+
+    document.getElementById('uplataForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const podaci = {
+        clan_id: Number(document.getElementById('clan_id').value),
+        iznos: Number(document.getElementById('iznos').value),
+        za_mesec: document.getElementById('za_mesec').value + '-01',
+        datum_uplate: val('datum_uplate') ?? todayStr(),
+        nacin_placanja: document.getElementById('nacin_placanja').value,
+        napomena: val('napomena'),
+      };
+
+      const { error } = await db.from('uplate').insert(podaci);
+      if (error) return showAlert('Greška pri čuvanju: ' + error.message);
+
+      showAlert('Uplata je sačuvana.', 'success');
+      document.getElementById('napomena').value = '';
+      document.getElementById('iznos').value = '';
+      document.getElementById('clan_id').value = '';
+      // prikazi mesec za koji je upravo uneta uplata
+      document.getElementById('filterMesec').value = podaci.za_mesec.slice(0, 7);
+      await ucitajUplate();
+    });
+
+    async function ucitajUplate() {
+      const mesec = document.getElementById('filterMesec').value;
+      if (!mesec) return;
+
+      const { data, error } = await db.from('uplate')
+        .select('id, iznos, datum_uplate, nacin_placanja, napomena, clanovi(ime, prezime)')
+        .eq('za_mesec', mesec + '-01')
+        .order('datum_uplate', { ascending: false });
+      if (error) return showAlert('Greška pri učitavanju uplata: ' + error.message);
+
+      const tbody = document.getElementById('tabela');
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Nema uplata za izabrani mesec.</td></tr>';
+        document.getElementById('ukupno').innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = data.map(u => `
+        <tr>
+          <td>${escapeHtml(u.clanovi?.prezime)} ${escapeHtml(u.clanovi?.ime)}</td>
+          <td>${fmtDate(u.datum_uplate)}</td>
+          <td>${fmtMoney(u.iznos)}</td>
+          <td>${escapeHtml(u.nacin_placanja)}</td>
+          <td>${escapeHtml(u.napomena ?? '')}</td>
+          <td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="obrisiUplatu(${u.id})">Obriši</button></td>
+        </tr>`).join('');
+
+      const zbir = data.reduce((s, u) => s + Number(u.iznos), 0);
+      document.getElementById('ukupno').innerHTML =
+        `<tr><td colspan="2">Ukupno (${data.length} uplata)</td><td colspan="4">${fmtMoney(zbir)}</td></tr>`;
+    }
+    document.getElementById('filterMesec').addEventListener('change', ucitajUplate);
+
+    async function obrisiUplatu(id) {
+      if (!confirm('Da li sigurno želiš da obrišeš ovu uplatu?')) return;
+      const { error } = await db.from('uplate').delete().eq('id', id);
+      if (error) return showAlert('Greška pri brisanju: ' + error.message);
+      await ucitajUplate();
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dolasci - Plivački klub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="style.css" rel="stylesheet">
+  <style>
+    .mreza-wrap { max-height: 72vh; overflow: auto; }
+    .mreza th, .mreza td { text-align: center; padding: .25rem .35rem; white-space: nowrap; }
+    .mreza .ime {
+      position: sticky; left: 0; z-index: 2; background: #fff;
+      text-align: left; min-width: 170px; border-right: 2px solid #dee2e6;
+    }
+    .mreza thead th { position: sticky; top: 0; z-index: 3; background: #f8f9fa; }
+    .mreza thead th.ime { z-index: 4; }
+    .mreza tfoot td { position: sticky; bottom: 0; z-index: 3; background: #f8f9fa; font-weight: 600; }
+    .mreza tfoot td.ime { z-index: 4; }
+    .mreza .vikend { background: #f1f3f5; }
+    .mreza thead th.vikend { background: #e9ecef; }
+    .mreza input[type=checkbox] { width: 1.15rem; height: 1.15rem; cursor: pointer; }
+    .mreza .neaktivan { color: #6c757d; }
+
+    @media print {
+      #nav, .no-print, #alertBox { display: none !important; }
+      .mreza-wrap { max-height: none; overflow: visible; }
+      .mreza th, .mreza td { font-size: 9px; padding: 1px 2px; }
+      .mreza thead th, .mreza tfoot td, .mreza .ime { position: static; }
+      @page { size: landscape; margin: 8mm; }
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div id="nav"></div>
+
+  <div class="container-fluid px-3 px-md-4 pb-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <h1 class="h3 mb-0">Dolasci na trening <span class="text-muted fs-5" id="naslovMeseca"></span></h1>
+      <button class="btn btn-outline-secondary btn-sm no-print" onclick="window.print()">🖨 Štampaj</button>
+    </div>
+
+    <div id="alertBox"></div>
+
+    <div class="row g-2 mb-3 align-items-end no-print">
+      <div class="col-12 col-md-4">
+        <label class="form-label small mb-0">Mesec</label>
+        <div class="input-group">
+          <button class="btn btn-outline-secondary" type="button" onclick="pomeriMesec(-1)">‹</button>
+          <input type="month" id="mesec" class="form-control">
+          <button class="btn btn-outline-secondary" type="button" onclick="pomeriMesec(1)">›</button>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-0">Grupa</label>
+        <select id="filterGrupa" class="form-select"><option value="">Sve grupe</option></select>
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-0">Pretraga</label>
+        <input type="search" id="search" class="form-control" placeholder="Ime ili prezime...">
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="mreza-wrap">
+        <table class="table table-sm table-bordered align-middle mb-0 mreza">
+          <thead id="zaglavlje"></thead>
+          <tbody id="telo"><tr><td class="text-muted py-4">Učitavanje...</td></tr></tbody>
+          <tfoot id="podnozje"></tfoot>
+        </table>
+      </div>
+    </div>
+    <p class="text-muted small mt-2 no-print">Klikni na polje da zabeležiš dolazak, a ponovnim klikom ga poništavaš. Čuva se odmah.</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    let mesec = '';
+    let clanovi = [];            // svi clanovi koji se prikazuju za izabrani mesec
+    let prikazani = [];          // posle filtera
+    let dolasci = new Set();     // kljuc: 'clanId|YYYY-MM-DD'
+    let brojDana = 30;
+
+    const SLOVA_DANA = ['N', 'P', 'U', 'S', 'Č', 'P', 'S']; // nedelja ... subota
+
+    (async () => {
+      if (!(await requireLogin())) return;
+      renderNavbar('dolasci');
+      document.getElementById('mesec').value = thisMonthStr();
+      await ucitajGrupe();
+      await ucitaj();
+    })();
+
+    async function ucitajGrupe() {
+      const { data, error } = await db.from('grupe').select('id, naziv').order('naziv');
+      if (error) return showAlert('Greška pri učitavanju grupa: ' + error.message);
+      document.getElementById('filterGrupa').innerHTML =
+        '<option value="">Sve grupe</option>' +
+        data.map(g => `<option value="${g.id}">${escapeHtml(g.naziv)}</option>`).join('');
+    }
+
+    async function ucitaj() {
+      mesec = document.getElementById('mesec').value;
+      if (!mesec) return;
+
+      const [y, m] = mesec.split('-').map(Number);
+      brojDana = new Date(y, m, 0).getDate();
+      document.getElementById('naslovMeseca').textContent = '· ' + fmtMonth(mesec + '-01');
+
+      const od = `${mesec}-01`;
+      const doDatuma = `${mesec}-${pad(brojDana)}`;
+
+      // Supabase vraca najvise 1000 redova odjednom, pa ucitavamo u delovima
+      let svi = [];
+      const korak = 1000;
+      for (let from = 0; ; from += korak) {
+        const { data, error } = await db.from('dolasci')
+          .select('clan_id, datum')
+          .gte('datum', od).lte('datum', doDatuma)
+          .order('id')
+          .range(from, from + korak - 1);
+        if (error) return showAlert('Greška pri učitavanju dolazaka: ' + error.message);
+        svi = svi.concat(data);
+        if (data.length < korak) break;
+      }
+      dolasci = new Set(svi.map(r => `${r.clan_id}|${r.datum}`));
+
+      // Aktivni clanovi + (neaktivni koji imaju dolaske u tom mesecu)
+      const ids = [...new Set(svi.map(r => r.clan_id))];
+      let upit = db.from('clanovi')
+        .select('id, ime, prezime, grupa_id, aktivan')
+        .order('prezime').order('ime');
+      upit = ids.length
+        ? upit.or(`aktivan.eq.true,id.in.(${ids.join(',')})`)
+        : upit.eq('aktivan', true);
+      const { data, error } = await upit;
+      if (error) return showAlert('Greška pri učitavanju članova: ' + error.message);
+      clanovi = data;
+
+      prikazi();
+    }
+
+    function prikazi() {
+      const [y, m] = mesec.split('-').map(Number);
+      const q = document.getElementById('search').value.trim().toLowerCase();
+      const grupa = document.getElementById('filterGrupa').value;
+
+      prikazani = clanovi.filter(c => {
+        if (grupa && String(c.grupa_id) !== grupa) return false;
+        if (q && !`${c.ime} ${c.prezime}`.toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      const dani = Array.from({ length: brojDana }, (_, i) => i + 1);
+      const jeVikend = d => { const w = new Date(y, m - 1, d).getDay(); return w === 0 || w === 6; };
+
+      document.getElementById('zaglavlje').innerHTML =
+        '<tr><th class="ime">Član</th>' +
+        dani.map(d => {
+          const w = new Date(y, m - 1, d).getDay();
+          return `<th class="${jeVikend(d) ? 'vikend' : ''}"><div>${d}</div><div class="small text-muted">${SLOVA_DANA[w]}</div></th>`;
+        }).join('') +
+        '<th>Ukupno</th></tr>';
+
+      const telo = document.getElementById('telo');
+      if (prikazani.length === 0) {
+        telo.innerHTML = `<tr><td colspan="${brojDana + 2}" class="text-muted py-4">Nema članova za prikaz.</td></tr>`;
+        document.getElementById('podnozje').innerHTML = '';
+        return;
+      }
+
+      telo.innerHTML = prikazani.map(c => {
+        const celije = dani.map(d => {
+          const datum = `${mesec}-${pad(d)}`;
+          const cekirano = dolasci.has(`${c.id}|${datum}`) ? 'checked' : '';
+          return `<td class="${jeVikend(d) ? 'vikend' : ''}"><input type="checkbox" class="form-check-input" data-clan="${c.id}" data-datum="${datum}" ${cekirano}></td>`;
+        }).join('');
+        return `<tr>
+          <td class="ime ${c.aktivan ? '' : 'neaktivan'}">${escapeHtml(c.prezime)} ${escapeHtml(c.ime)}${c.aktivan ? '' : ' <small>(neaktivan)</small>'}</td>
+          ${celije}
+          <td class="fw-semibold" id="tot_clan_${c.id}">0</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('podnozje').innerHTML =
+        '<tr><td class="ime">Prisutno</td>' +
+        dani.map(d => `<td id="tot_dan_${d}" class="${jeVikend(d) ? 'vikend' : ''}">0</td>`).join('') +
+        '<td id="tot_sve">0</td></tr>';
+
+      osveziZbirove();
+    }
+
+    // Preracuna zbirove po clanu, po danu i ukupno (samo za prikazane clanove)
+    function osveziZbirove() {
+      const poDanu = new Array(brojDana + 1).fill(0);
+      let sve = 0;
+      prikazani.forEach(c => {
+        let brojac = 0;
+        for (let d = 1; d <= brojDana; d++) {
+          if (dolasci.has(`${c.id}|${mesec}-${pad(d)}`)) { brojac++; poDanu[d]++; }
+        }
+        sve += brojac;
+        const el = document.getElementById('tot_clan_' + c.id);
+        if (el) el.textContent = brojac;
+      });
+      for (let d = 1; d <= brojDana; d++) {
+        const el = document.getElementById('tot_dan_' + d);
+        if (el) el.textContent = poDanu[d] || '';
+      }
+      const ukupno = document.getElementById('tot_sve');
+      if (ukupno) ukupno.textContent = sve;
+    }
+
+    // Klik na polje: upisi ili obrisi dolazak
+    document.getElementById('telo').addEventListener('change', async (e) => {
+      const cb = e.target;
+      if (cb.type !== 'checkbox') return;
+
+      const clan = Number(cb.dataset.clan);
+      const datum = cb.dataset.datum;
+      const kljuc = `${clan}|${datum}`;
+      cb.disabled = true;
+
+      let error;
+      if (cb.checked) {
+        ({ error } = await db.from('dolasci').insert({ clan_id: clan, datum }));
+        if (!error || error.code === '23505') { dolasci.add(kljuc); error = null; }
+      } else {
+        ({ error } = await db.from('dolasci').delete().eq('clan_id', clan).eq('datum', datum));
+        if (!error) dolasci.delete(kljuc);
+      }
+
+      cb.disabled = false;
+      if (error) {
+        cb.checked = !cb.checked;   // vrati staro stanje
+        return showAlert('Greška pri čuvanju: ' + error.message);
+      }
+      osveziZbirove();
+    });
+
+    function pomeriMesec(delta) {
+      const [y, m] = document.getElementById('mesec').value.split('-').map(Number);
+      const d = new Date(y, m - 1 + delta, 1);
+      document.getElementById('mesec').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+      ucitaj();
+    }
+
+    document.getElementById('mesec').addEventListener('change', ucitaj);
+    document.getElementById('search').addEventListener('input', prikazi);
+    document.getElementById('filterGrupa').addEventListener('input', prikazi);
+  </script>
+</body>
+</html>

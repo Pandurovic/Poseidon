@@ -1,0 +1,16 @@
+:root {
+  --bs-body-font-family: 'Montserrat', sans-serif;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+   min-height: 100vh;
+    background: #f8f9fa url('grb.png') no-repeat center center;
+    background-size: contain;   /* ceo grb je uvek vidljiv */
+  }
+
+  /* da se obrazac lepo čita preko slike */
+  .card {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+

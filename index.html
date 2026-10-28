@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prijava - Plivački klub</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="style.css" rel="stylesheet">
+<style>
+</style>
+</head>
+<body class="bg-light">
+  <div class="container">
+    <div class="row justify-content-center mt-5">
+      <div class="col-11 col-sm-8 col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-body p-4">
+            <h1 class="h4 text-center mb-4">Plivački klub Poseidon Paraćin</h1>
+            <div id="alertBox"></div>
+            <form id="loginForm">
+                <div class="mb-3">
+                <label for="email" class="form-label d-block text-center">Korisničko ime</label>
+                <input type="text" class="form-control" id="email" required autocomplete="username">
+                </div>
+                <div class="mb-3">
+                <label for="password" class="form-label d-block text-center">Lozinka</label>
+                <input type="password" class="form-control" id="password" required autocomplete="current-password">
+                </div>
+              <button type="submit" class="btn btn-primary w-100" id="loginBtn">Prijavi se</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="common.js"></script>
+  <script>
+    // Ako je vec prijavljen, ide pravo na listu clanova
+    db.auth.getSession().then(({ data: { session } }) => {
+      if (session) window.location.href = 'clanovi.html';
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.textContent = 'Prijavljivanje...';
+
+      // Korisnik kuca samo "admin", a mi dodajemo domen u pozadini
+      const unos = document.getElementById('email').value.trim().toLowerCase();
+      const email = unos.includes('@') ? unos : unos + '@poseidon.rs';
+
+      const { error } = await db.auth.signInWithPassword({
+        email: email,
+        password: document.getElementById('password').value,
+      });
+
+      if (error) {
+        showAlert('Pogrešno korisničko ime ili lozinka.');
+        btn.disabled = false;
+        btn.textContent = 'Prijavi se';
+        return;
+      }
+      window.location.href = 'clanovi.html';
+    });
+  </script>
+</body>
+</html>
