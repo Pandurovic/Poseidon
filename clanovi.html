@@ -65,7 +65,7 @@
           <div class="row g-3">
             <div class="col-md-6"><label class="form-label">Ime *</label><input id="ime" class="form-control" required></div>
             <div class="col-md-6"><label class="form-label">Prezime *</label><input id="prezime" class="form-control" required></div>
-            <div class="col-md-6"><label class="form-label">Datum rođenja</label><input type="date" id="datum_rodjenja" class="form-control"></div>
+           <div class="col-md-6"><label class="form-label">Godina rođenja</label><input type="number" id="godina_rodjenja" class="form-control" min="1930" max="2030" placeholder="npr. 2015"></div>
             <div class="col-md-6"><label class="form-label">Grupa</label><select id="grupa_id" class="form-select"><option value="">— bez grupe —</option></select></div>
             <div class="col-md-6"><label class="form-label">Telefon</label><input id="telefon" class="form-control"></div>
             <div class="col-md-6"><label class="form-label">Email</label><input type="email" id="email" class="form-control"></div>
@@ -167,7 +167,7 @@
       document.getElementById('clanId').value = c ? c.id : '';
 
       if (c) {
-        ['ime', 'prezime', 'datum_rodjenja', 'telefon', 'email', 'ime_roditelja', 'datum_upisa', 'napomena']
+        ['ime', 'prezime', 'godina_rodjenja', 'telefon', 'email', 'ime_roditelja', 'datum_upisa', 'napomena']
           .forEach(f => { document.getElementById(f).value = c[f] ?? ''; });
         document.getElementById('grupa_id').value = c.grupa_id ?? '';
         document.getElementById('aktivan').checked = c.aktivan;
@@ -183,7 +183,7 @@
       const podaci = {
         ime: val('ime'),
         prezime: val('prezime'),
-        datum_rodjenja: val('datum_rodjenja'),
+        godina_rodjenja: val('godina_rodjenja') ? Number(val('godina_rodjenja')) : null,
         telefon: val('telefon'),
         email: val('email'),
         ime_roditelja: val('ime_roditelja'),
