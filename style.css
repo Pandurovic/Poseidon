@@ -1,16 +1,162 @@
+/* =====================================================
+   PK Poseidon - zajednički stilovi
+   Boje su preuzete sa grba: duboka plava i morska zelena
+   ===================================================== */
 :root {
-  --bs-body-font-family: 'Montserrat', sans-serif;
+  --pk-blue: #0a4a78;
+  --pk-blue-dark: #083a5f;
+  --pk-blue-darker: #072f4d;
+  --pk-teal: #0f8a72;
+  --pk-teal-dark: #0c7260;
+  --bs-primary: #0a4a78;
+  --bs-primary-rgb: 10, 74, 120;
+  --bs-success: #0f8a72;
+  --bs-success-rgb: 15, 138, 114;
+  --bs-link-color: #0a4a78;
+  --bs-link-hover-color: #083a5f;
+  --bs-body-font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+html { -webkit-text-size-adjust: 100%; }
+
 body {
-  font-family: 'Montserrat', sans-serif;
-   min-height: 100vh;
-    background: #f8f9fa url('grb.PNG') no-repeat center center;
-    background-size: contain;   /* ceo grb je uvek vidljiv */
-  }
+  font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: #eef3f7;
+  position: relative;
+  /* iPhone sa urezom (notch) i iPad */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
-  /* da se obrazac lepo čita preko slike */
-  .card {
-    background-color: rgba(255, 255, 255, 0.92);
-  }
+/* Grb kao blagi vodeni žig na unutrašnjim stranicama */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url('grb.PNG') no-repeat center center;
+  background-size: contain;
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: -1;
+}
+/* Na stranici za prijavu grb je u punoj jačini */
+body.login-page::before { opacity: 1; }
 
+.card { background-color: rgba(255, 255, 255, 0.96); }
+
+/* ---------- Dugmad u bojama kluba ---------- */
+.btn-primary {
+  --bs-btn-bg: var(--pk-blue);
+  --bs-btn-border-color: var(--pk-blue);
+  --bs-btn-hover-bg: var(--pk-blue-dark);
+  --bs-btn-hover-border-color: var(--pk-blue-dark);
+  --bs-btn-active-bg: var(--pk-blue-darker);
+  --bs-btn-active-border-color: var(--pk-blue-darker);
+  --bs-btn-disabled-bg: var(--pk-blue);
+  --bs-btn-disabled-border-color: var(--pk-blue);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--pk-blue);
+  --bs-btn-border-color: var(--pk-blue);
+  --bs-btn-hover-bg: var(--pk-blue);
+  --bs-btn-hover-border-color: var(--pk-blue);
+  --bs-btn-active-bg: var(--pk-blue-dark);
+  --bs-btn-active-border-color: var(--pk-blue-dark);
+}
+.btn-success {
+  --bs-btn-bg: var(--pk-teal);
+  --bs-btn-border-color: var(--pk-teal);
+  --bs-btn-hover-bg: var(--pk-teal-dark);
+  --bs-btn-hover-border-color: var(--pk-teal-dark);
+  --bs-btn-active-bg: var(--pk-teal-dark);
+  --bs-btn-active-border-color: var(--pk-teal-dark);
+  --bs-btn-disabled-bg: var(--pk-teal);
+  --bs-btn-disabled-border-color: var(--pk-teal);
+}
+.form-check-input:checked { background-color: var(--pk-teal); border-color: var(--pk-teal); }
+
+/* ---------- Navigacija ---------- */
+.navbar {
+  padding-top: calc(0.5rem + env(safe-area-inset-top));
+}
+.navbar-brand { font-weight: 600; }
+
+/* ---------- Poruke: uvek vidljive i kad se stranica skroluje ---------- */
+#alertBox { position: sticky; top: 0.5rem; z-index: 1040; }
+
+/* ---------- Dodir (iPhone / iPad) ---------- */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 40px; padding: 0.4rem 0.8rem; }
+  .form-control, .form-select { min-height: 44px; }
+  .nav-link { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+  .form-check-input { width: 1.3em; height: 1.3em; }
+}
+
+/* iOS Safari povećava stranicu kad je font polja manji od 16px */
+@media (max-width: 991.98px) {
+  .form-control, .form-select, .form-control-sm, .form-select-sm { font-size: 16px; }
+}
+
+/* ---------- Tabele koje se na telefonu pretvaraju u kartice ---------- */
+@media (max-width: 767.98px) {
+  .tabela-kartice,
+  .tabela-kartice tbody,
+  .tabela-kartice tfoot,
+  .tabela-kartice tr { display: block; width: 100%; }
+  .tabela-kartice thead { display: none; }
+  .tabela-kartice tbody tr {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #dee2e6;
+  }
+  .tabela-kartice tfoot tr { padding: 0.75rem 1rem; }
+  .tabela-kartice td {
+    display: block;
+    border: 0;
+    padding: 0.2rem 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .tabela-kartice td[data-label] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    text-align: right;
+  }
+  .tabela-kartice td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #6c757d;
+    text-align: left;
+  }
+  .tabela-kartice td.naslov {
+    font-size: 1.05rem;
+    padding-bottom: 0.35rem;
+  }
+  .tabela-kartice td.akcije {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.6rem;
+    text-align: left !important;
+  }
+  .tabela-kartice td.akcije > * { flex: 1 1 auto; }
+  .tabela-kartice td[data-label] .form-control { flex: 1; min-width: 0; text-align: left; }
+}
+
+/* ---------- Prozori (modali) preko celog ekrana na telefonu ---------- */
+@media (max-width: 575.98px) {
+  .modal-fullscreen-sm-down .modal-footer { position: sticky; bottom: 0; background: #fff; }
+}
+
+/* ---------- Štampa ---------- */
+@media print {
+  body::before { display: none !important; }
+  body { padding: 0 !important; }
+}

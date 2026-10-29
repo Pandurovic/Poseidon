@@ -2,7 +2,14 @@
 <html lang="sr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a4a78">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="PK Poseidon">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>Uplate - PK Poseidon</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,10 +28,10 @@
     }
   </style>
 </head>
-<body class="bg-light">
+<body>
   <div id="nav"></div>
 
-  <div class="container pb-5">
+  <div class="container-fluid container-lg pb-5">
     <h1 class="h3 mb-3">Uplate</h1>
     <div id="alertBox"></div>
 
@@ -33,8 +40,9 @@
       <div class="card-header bg-white fw-semibold">Nova uplata</div>
       <div class="card-body">
         <form id="uplataForm" class="row g-3">
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label class="form-label">Član *</label>
+            <input type="search" id="trazi_clana" class="form-control mb-2" placeholder="Pretraži člana (ime ili prezime)...">
             <select id="clan_id" class="form-select" required><option value="">— izaberi člana —</option></select>
           </div>
           <div class="col-6 col-md-3">
@@ -43,7 +51,7 @@
           </div>
           <div class="col-6 col-md-3">
             <label class="form-label">Iznos (RSD) *</label>
-            <input type="number" id="iznos" class="form-control" min="0.01" step="0.01" required>
+            <input type="number" inputmode="decimal" id="iznos" class="form-control" min="0.01" step="0.01" required>
           </div>
           <div class="col-6 col-md-3">
             <label class="form-label">Datum uplate</label>
@@ -56,12 +64,12 @@
               <option value="racun">Račun</option>
             </select>
           </div>
-          <div class="col-md-6">
+          <div class="col-12 col-md-6">
             <label class="form-label">Napomena</label>
-            <input id="napomena" class="form-control">
+            <input id="napomena" class="form-control" autocomplete="off">
           </div>
           <div class="col-12">
-            <button type="submit" class="btn btn-success">Sačuvaj uplatu</button>
+            <button type="submit" class="btn btn-success w-100 w-md-auto px-4" id="sacuvajBtn">Sačuvaj uplatu</button>
           </div>
         </form>
       </div>
@@ -81,7 +89,7 @@
 
     <div class="card shadow-sm">
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0 tabela-kartice">
           <thead class="table-light">
             <tr><th>Član</th><th>Datum uplate</th><th>Iznos</th><th>Način</th><th>Napomena</th><th></th></tr>
           </thead>
@@ -94,11 +102,11 @@
 
   <!-- Prozor za izbor izvestaja -->
   <div class="modal fade" id="stampaModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
       <form class="modal-content" id="stampaForm">
         <div class="modal-header">
           <h5 class="modal-title">Štampanje izveštaja o uplatama</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Zatvori"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">
@@ -127,25 +135,33 @@
   <div id="stampa"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="config.js"></script>
   <script src="common.js"></script>
   <script>
+    // Nazivi vrsta uplate (moraju da odgovaraju vrednostima u formi)
+    const NAZIVI_VRSTA = { gotovina: 'Gotovina', racun: 'Račun' };
+    const nazivVrste = v => NAZIVI_VRSTA[v] ?? v ?? '';
+
     let aktivniClanovi = [];
 
     (async () => {
       if (!(await requireLogin())) return;
       renderNavbar('uplate');
 
-      document.getElementById('za_mesec').value = thisMonthStr();
+      // Ako dolazimo sa liste clanova ili dugovanja (uplate.html?clan=5&mesec=2026-10)
+      const params = new URLSearchParams(window.location.search);
+      const mesecIzUrl = params.get('mesec');
+      const mesecPocetni = /^\d{4}-\d{2}$/.test(mesecIzUrl ?? '') ? mesecIzUrl : thisMonthStr();
+
+      document.getElementById('za_mesec').value = mesecPocetni;
       document.getElementById('datum_uplate').value = todayStr();
-      document.getElementById('filterMesec').value = thisMonthStr();
+      document.getElementById('filterMesec').value = mesecPocetni;
 
       await ucitajClanove();
       await ucitajUplate();
 
-      // Ako dolazimo sa liste clanova (uplate.html?clan=5), unapred izaberi clana
-      const clanIzUrl = new URLSearchParams(window.location.search).get('clan');
+      const clanIzUrl = params.get('clan');
       if (clanIzUrl) {
         document.getElementById('clan_id').value = clanIzUrl;
         popuniIznos();
@@ -159,10 +175,29 @@
         .order('prezime').order('ime');
       if (error) return showAlert('Greška pri učitavanju članova: ' + error.message);
       aktivniClanovi = data;
-      document.getElementById('clan_id').innerHTML =
-        '<option value="">— izaberi člana —</option>' +
-        data.map(c => `<option value="${c.id}">${escapeHtml(c.prezime)} ${escapeHtml(c.ime)}</option>`).join('');
+      prikaziOpcijeClanova('');
     }
+
+    // Popuni listu clanova; q filtrira po imenu/prezimenu bez obzira na dijakritike
+    function prikaziOpcijeClanova(q) {
+      const sel = document.getElementById('clan_id');
+      const izabran = sel.value;
+      const nq = norm(q.trim());
+      const lista = aktivniClanovi.filter(c => !nq || norm(`${c.prezime} ${c.ime}`).includes(nq));
+
+      sel.innerHTML =
+        `<option value="">— izaberi člana${nq ? ` (${lista.length})` : ''} —</option>` +
+        lista.map(c => `<option value="${c.id}">${escapeHtml(c.prezime)} ${escapeHtml(c.ime)}</option>`).join('');
+
+      if (lista.length === 1 && nq) {
+        sel.value = lista[0].id;       // samo jedan pogodak -> izaberi ga
+        popuniIznos();
+      } else if (izabran && lista.some(c => String(c.id) === izabran)) {
+        sel.value = izabran;
+      }
+    }
+    document.getElementById('trazi_clana').addEventListener('input',
+      e => prikaziOpcijeClanova(e.target.value));
 
     // Kad se izabere clan, predlozi iznos iz mesecne clanarine njegove grupe
     function popuniIznos() {
@@ -174,6 +209,7 @@
 
     document.getElementById('uplataForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = document.getElementById('sacuvajBtn');
       const podaci = {
         clan_id: Number(document.getElementById('clan_id').value),
         iznos: Number(document.getElementById('iznos').value),
@@ -183,16 +219,34 @@
         napomena: val('napomena'),
       };
 
-      const { error } = await db.from('uplate').insert(podaci);
-      if (error) return showAlert('Greška pri čuvanju: ' + error.message);
+      setBusy(btn, true);
+      try {
+        // Upozorenje ako za tog clana i mesec vec postoji uplata
+        const { data: postojece, error: err1 } = await db.from('uplate')
+          .select('id').eq('clan_id', podaci.clan_id).eq('za_mesec', podaci.za_mesec);
+        if (err1) return showAlert('Greška pri proveri: ' + err1.message);
+        if (postojece.length > 0) {
+          const ok = await confirmDialog(
+            `Za ovog člana već postoji uplata za ${fmtMonth(podaci.za_mesec)}. Da li ipak želiš da sačuvaš još jednu?`,
+            { okText: 'Sačuvaj ipak' });
+          if (!ok) return;
+        }
 
-      showAlert('Uplata je sačuvana.', 'success');
-      document.getElementById('napomena').value = '';
-      document.getElementById('iznos').value = '';
-      document.getElementById('clan_id').value = '';
-      // prikazi mesec za koji je upravo uneta uplata
-      document.getElementById('filterMesec').value = podaci.za_mesec.slice(0, 7);
-      await ucitajUplate();
+        const { error } = await db.from('uplate').insert(podaci);
+        if (error) return showAlert('Greška pri čuvanju: ' + error.message);
+
+        showAlert('Uplata je sačuvana.', 'success');
+        // Mesec, datum i nacin placanja ostaju, da bi unos vise uplata zaredom bio brz
+        document.getElementById('napomena').value = '';
+        document.getElementById('iznos').value = '';
+        document.getElementById('clan_id').value = '';
+        document.getElementById('trazi_clana').value = '';
+        prikaziOpcijeClanova('');
+        document.getElementById('filterMesec').value = podaci.za_mesec.slice(0, 7);
+        await ucitajUplate();
+      } finally {
+        setBusy(btn, false);
+      }
     });
 
     async function ucitajUplate() {
@@ -214,12 +268,12 @@
 
       tbody.innerHTML = data.map(u => `
         <tr>
-          <td>${escapeHtml(u.clanovi?.prezime)} ${escapeHtml(u.clanovi?.ime)}</td>
-          <td>${fmtDate(u.datum_uplate)}</td>
-          <td>${fmtMoney(u.iznos)}</td>
-          <td>${escapeHtml(u.nacin_placanja)}</td>
-          <td>${escapeHtml(u.napomena ?? '')}</td>
-          <td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="obrisiUplatu(${u.id})">Obriši</button></td>
+          <td class="naslov"><strong>${escapeHtml(u.clanovi?.prezime)} ${escapeHtml(u.clanovi?.ime)}</strong></td>
+          <td data-label="Datum uplate">${fmtDate(u.datum_uplate)}</td>
+          <td data-label="Iznos">${fmtMoney(u.iznos)}</td>
+          <td data-label="Način">${escapeHtml(nazivVrste(u.nacin_placanja))}</td>
+          ${u.napomena ? `<td data-label="Napomena">${escapeHtml(u.napomena)}</td>` : '<td class="d-none d-md-table-cell"></td>'}
+          <td class="text-end akcije"><button class="btn btn-sm btn-outline-danger" onclick="obrisiUplatu(${u.id})">Obriši</button></td>
         </tr>`).join('');
 
       const zbir = data.reduce((s, u) => s + Number(u.iznos), 0);
@@ -229,8 +283,6 @@
     document.getElementById('filterMesec').addEventListener('change', ucitajUplate);
 
     // ===== Stampanje izvestaja =====
-    const NAZIVI_VRSTA = { gotovina: 'Gotovina', uplatnica: 'Uplatnica', kartica: 'Kartica', drugo: 'Drugo' };
-
     function otvoriStampu() {
       document.getElementById('stampaMesec').value = document.getElementById('filterMesec').value || thisMonthStr();
       document.getElementById('stampaVrsta').value = '';
@@ -279,7 +331,7 @@
         <h3 class="h5 mb-3">Izveštaj o uplatama</h3>
         <p class="mb-3">
           Za mesec: <strong>${fmtMonth(mesec + '-01')}</strong><br>
-          Vrsta uplate: <strong>${vrsta ? NAZIVI_VRSTA[vrsta] : 'Sve vrste'}</strong><br>
+          Vrsta uplate: <strong>${vrsta ? nazivVrste(vrsta) : 'Sve vrste'}</strong><br>
           Datum štampe: ${fmtDate(todayStr())}
         </p>
         <table class="table table-sm table-bordered">
@@ -295,7 +347,8 @@
     });
 
     async function obrisiUplatu(id) {
-      if (!confirm('Da li sigurno želiš da obrišeš ovu uplatu?')) return;
+      const ok = await confirmDialog('Da li sigurno želiš da obrišeš ovu uplatu?', { okText: 'Obriši', danger: true });
+      if (!ok) return;
       const { error } = await db.from('uplate').delete().eq('id', id);
       if (error) return showAlert('Greška pri brisanju: ' + error.message);
       await ucitajUplate();
