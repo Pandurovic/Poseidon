@@ -3,12 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Uplate - PK Poseidon</title>
+  <title>Uplate - Plivački klub</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="style.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="style.css" rel="stylesheet">
+  <style>
+    /* Izvestaj za stampu: na ekranu je skriven, a pri stampi je jedino sto se vidi */
+    #stampa { display: none; }
+    @media print {
+      @page { margin: 15mm; }
+      body > *:not(#stampa) { display: none !important; }
+      body { background: #fff !important; }
+      #stampa { display: block; color: #000; }
+      #stampa table { width: 100%; }
+    }
+  </style>
 </head>
 <body class="bg-light">
   <div id="nav"></div>
@@ -42,7 +53,9 @@
             <label class="form-label">Način plaćanja</label>
             <select id="nacin_placanja" class="form-select">
               <option value="gotovina">Gotovina</option>
-              <option value="racun">Račun</option>
+              <option value="uplatnica">Uplatnica</option>
+              <option value="kartica">Kartica</option>
+              <option value="drugo">Drugo</option>
             </select>
           </div>
           <div class="col-md-6">
@@ -59,9 +72,12 @@
     <!-- Pregled po mesecu -->
     <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-2">
       <h2 class="h5 mb-0">Pregled uplata</h2>
-      <div>
-        <label class="form-label small mb-0">Mesec</label>
-        <input type="month" id="filterMesec" class="form-control form-control-sm">
+      <div class="d-flex align-items-end gap-2">
+        <div>
+          <label class="form-label small mb-0">Mesec</label>
+          <input type="month" id="filterMesec" class="form-control form-control-sm">
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="otvoriStampu()">🖨 Štampaj izveštaj</button>
       </div>
     </div>
 
@@ -77,6 +93,42 @@
       </div>
     </div>
   </div>
+
+  <!-- Prozor za izbor izvestaja -->
+  <div class="modal fade" id="stampaModal" tabindex="-1">
+    <div class="modal-dialog">
+      <form class="modal-content" id="stampaForm">
+        <div class="modal-header">
+          <h5 class="modal-title">Štampanje izveštaja o uplatama</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Za mesec *</label>
+            <input type="month" id="stampaMesec" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Vrsta uplate</label>
+            <select id="stampaVrsta" class="form-select">
+              <option value="">Sve vrste</option>
+              <option value="gotovina">Gotovina</option>
+              <option value="uplatnica">Uplatnica</option>
+              <option value="kartica">Kartica</option>
+              <option value="drugo">Drugo</option>
+            </select>
+          </div>
+          <div id="stampaPoruka"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Otkaži</button>
+          <button type="submit" class="btn btn-primary">Štampaj</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sadrzaj koji se stampa (vidi se samo pri stampi) -->
+  <div id="stampa"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -179,6 +231,72 @@
         `<tr><td colspan="2">Ukupno (${data.length} uplata)</td><td colspan="4">${fmtMoney(zbir)}</td></tr>`;
     }
     document.getElementById('filterMesec').addEventListener('change', ucitajUplate);
+
+    // ===== Stampanje izvestaja =====
+    const NAZIVI_VRSTA = { gotovina: 'Gotovina', uplatnica: 'Uplatnica', kartica: 'Kartica', drugo: 'Drugo' };
+
+    function otvoriStampu() {
+      document.getElementById('stampaMesec').value = document.getElementById('filterMesec').value || thisMonthStr();
+      document.getElementById('stampaVrsta').value = '';
+      document.getElementById('stampaPoruka').innerHTML = '';
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('stampaModal')).show();
+    }
+
+    document.getElementById('stampaForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mesec = document.getElementById('stampaMesec').value;
+      const vrsta = document.getElementById('stampaVrsta').value;
+      const poruka = document.getElementById('stampaPoruka');
+      poruka.innerHTML = '';
+
+      let upit = db.from('uplate')
+        .select('iznos, datum_uplate, clanovi(ime, prezime)')
+        .eq('za_mesec', mesec + '-01');
+      if (vrsta) upit = upit.eq('nacin_placanja', vrsta);
+      const { data, error } = await upit.order('datum_uplate');
+
+      if (error) {
+        poruka.innerHTML = `<div class="alert alert-danger mb-0">Greška: ${escapeHtml(error.message)}</div>`;
+        return;
+      }
+      if (data.length === 0) {
+        poruka.innerHTML = '<div class="alert alert-warning mb-0">Nema uplata za izabrani mesec i vrstu uplate.</div>';
+        return;
+      }
+
+      // po datumu uplate, a unutar istog dana po prezimenu
+      data.sort((a, b) =>
+        a.datum_uplate.localeCompare(b.datum_uplate) ||
+        (a.clanovi?.prezime ?? '').localeCompare(b.clanovi?.prezime ?? '', 'sr'));
+
+      const redovi = data.map((u, i) => `
+        <tr>
+          <td>${i + 1}.</td>
+          <td>${escapeHtml(u.clanovi?.ime)} ${escapeHtml(u.clanovi?.prezime)}</td>
+          <td>${fmtDate(u.datum_uplate)}</td>
+          <td class="text-end">${fmtMoney(u.iznos)}</td>
+        </tr>`).join('');
+      const zbir = data.reduce((s, u) => s + Number(u.iznos), 0);
+
+      document.getElementById('stampa').innerHTML = `
+        <h2 class="h4 mb-0">Plivački klub</h2>
+        <h3 class="h5 mb-3">Izveštaj o uplatama</h3>
+        <p class="mb-3">
+          Za mesec: <strong>${fmtMonth(mesec + '-01')}</strong><br>
+          Vrsta uplate: <strong>${vrsta ? NAZIVI_VRSTA[vrsta] : 'Sve vrste'}</strong><br>
+          Datum štampe: ${fmtDate(todayStr())}
+        </p>
+        <table class="table table-sm table-bordered">
+          <thead><tr><th>R.br.</th><th>Ime i prezime</th><th>Datum uplate</th><th class="text-end">Iznos</th></tr></thead>
+          <tbody>${redovi}</tbody>
+          <tfoot><tr class="fw-bold"><td colspan="3">Ukupno (${data.length} uplata)</td><td class="text-end">${fmtMoney(zbir)}</td></tr></tfoot>
+        </table>`;
+
+      // zatvori prozor, pa tek onda stampaj da prozor ne zavrsi u ispisu
+      const modalEl = document.getElementById('stampaModal');
+      modalEl.addEventListener('hidden.bs.modal', () => window.print(), { once: true });
+      bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    });
 
     async function obrisiUplatu(id) {
       if (!confirm('Da li sigurno želiš da obrišeš ovu uplatu?')) return;
